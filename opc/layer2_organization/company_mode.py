@@ -2748,6 +2748,14 @@ class CompanyWorkItemExecutor:
                 )
             ):
                 return True
+            # NOTE: no synthesis/resumed/rework early-returns here. Those cards
+            # reach a runnable phase through refresh_dependents_for_run (all
+            # children APPROVED) or a settlement stamp (dependency_settlement
+            # covering failed/stuck deps), both of which the dependency loop
+            # below already accepts. Bypassing that loop let a card dispatch
+            # before its dependencies completed (e.g. a rework/settlement card
+            # whose deps were rebuilt/rewired to fresh, not-yet-approved cards),
+            # so the check is enforced uniformly for every dependency state.
             dependency_ids = [
                 str(item).strip()
                 for item in list(metadata.get("dependency_work_item_ids", []) or [])
@@ -6454,7 +6462,22 @@ class CompanyWorkItemExecutor:
                 session.focused_work_item_id = ""
                 session.updated_at = now
                 continue
-            if is_dispatchable(work_item):
+            # If focused work item is in a terminal phase (approved, done, etc.),
+            # clear the focus so the session can pick up new work.
+            if work_item.phase in DONE_PHASES:
+                session.status = "idle"
+                session.resident_status = "idle"
+                session.focused_work_item_id = ""
+                session.updated_at = now
+                continue
+            # Unpark only when the focused card is genuinely dispatchable.
+            # is_dispatchable already covers READY / READY_FOR_REWORK and
+            # orphaned in-flight cards, while still respecting dispatch_hold /
+            # queued_behind_session / attempt-ledger brakes. A bare
+            # is_runnable(phase) check would override those holds and unpark a
+            # session whose card must stay parked.
+            dispatchable = is_dispatchable(work_item)
+            if dispatchable:
                 session.status = "idle"
                 session.resident_status = "idle"
                 session.focused_work_item_id = ""
