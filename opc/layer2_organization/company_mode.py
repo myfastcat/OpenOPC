@@ -2748,6 +2748,19 @@ class CompanyWorkItemExecutor:
                 )
             ):
                 return True
+            # Synthesis turn: work item was woken by refresh_dependents_for_run
+            # after all children completed. Skip dependency check - already validated.
+            if bool(metadata.get("synthesis_turn_started", False)):
+                return True
+            # Resumed from waiting: frontier was set when waking the parent.
+            if str(metadata.get("frontier", "") or "").strip() in ("resumed", "synthesis_ready"):
+                return True
+            # Rework: work item was rejected by reviewer and sent back for rework.
+            # It should be runnable regardless of dependency state.
+            if phase == Phase.READY_FOR_REWORK:
+                return True
+            if str(metadata.get("rework_feedback", "") or "").strip():
+                return True
             dependency_ids = [
                 str(item).strip()
                 for item in list(metadata.get("dependency_work_item_ids", []) or [])
@@ -6454,7 +6467,19 @@ class CompanyWorkItemExecutor:
                 session.focused_work_item_id = ""
                 session.updated_at = now
                 continue
-            if is_dispatchable(work_item):
+            # If focused work item is in a terminal phase (approved, done, etc.),
+            # clear the focus so the session can pick up new work.
+            if work_item.phase in DONE_PHASES:
+                session.status = "idle"
+                session.resident_status = "idle"
+                session.focused_work_item_id = ""
+                session.updated_at = now
+                continue
+            # Check if work item is dispatchable OR in a phase that means
+            # the session should be unblocked (READY, READY_FOR_REWORK, or
+            # any phase that is_runnable).
+            dispatchable = is_dispatchable(work_item) or is_runnable(work_item.phase)
+            if dispatchable:
                 session.status = "idle"
                 session.resident_status = "idle"
                 session.focused_work_item_id = ""

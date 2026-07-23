@@ -5458,12 +5458,30 @@ class OPCStore:
             item.claimed_by_role_runtime_session_id = str(claimed_by_role_runtime_session_id or "").strip()
         if claimed_by_seat_id is not None:
             item.claimed_by_seat_id = str(claimed_by_seat_id or "").strip()
-        if metadata_unset or metadata_updates:
+        # Centralized claim invariant: clearing the runtime-claim column MUST
+        # also clear the metadata mirror (claimed_by_role_session_id /
+        # claimed_task_id) that the dispatch CAS
+        # (claim_delegation_work_item_if_dispatchable) predicates on.
+        # Any release path that zeroed only the column — the turn-boundary
+        # release into a non-terminal phase (transition_work_item), the
+        # dependency-frontier wake (refresh_dependents_for_run), a review
+        # recovery exit — otherwise left the card in READY / READY_FOR_REWORK
+        # but permanently unclaimable: the 3-agent parent-resume deadlock and
+        # the 4-agent QA/delivery deadlock. Enforcing it here closes the
+        # whole bug class at the single write chokepoint.
+        clear_claim_mirror = (
+            claimed_by_role_runtime_session_id is not None
+            and not str(claimed_by_role_runtime_session_id or "").strip()
+        )
+        if metadata_unset or metadata_updates or clear_claim_mirror:
             metadata = dict(item.metadata or {})
             for key in list(metadata_unset or []):
                 metadata.pop(str(key), None)
             if metadata_updates:
                 metadata.update(dict(metadata_updates))
+            if clear_claim_mirror:
+                metadata["claimed_by_role_session_id"] = ""
+                metadata["claimed_task_id"] = ""
             item.metadata = metadata
         item.updated_at = datetime.now()
         await self.save_delegation_work_item(item)
