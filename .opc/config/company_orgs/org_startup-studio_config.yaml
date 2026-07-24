@@ -1,0 +1,280 @@
+schema_version: 2
+kind: opc_org_architecture
+organization_id: startup-studio
+organization_name: Startup Studio
+company:
+  name: Startup Studio
+  topology: Lean Game Studio
+  company_profile: custom
+  execution_model: actor_runtime
+  final_decider_role_id: startup-studio:ceo
+  company_profiles:
+  - corporate
+  - custom
+roles:
+- id: startup-studio:ceo
+  name: CEO
+  responsibility: Product vision, strategy, and final decisions
+  reports_to: owner
+  icon: null
+  can_spawn:
+  - startup-studio:cto
+  tools: []
+  preferred_external_agent: null
+  prompt_refs:
+  - 'You are the CEO. Product vision, strategy, and final decisions Coordinate work
+    with: CTO. Delegate tasks appropriately and aggregate results. Review outputs
+    for quality and correctness. Approve quality work or request changes.'
+  skill_refs: []
+  handoff_template_ref: null
+  memory_policy_ref: null
+  artifact_contract_ref: null
+  runtime_policy:
+    execution_strategy: native
+    allowed_downstream_roles:
+    - startup-studio:cto
+    review_role: null
+    default_turn_type: work
+    shell_timeout_override: null
+    setup_env_type: null
+    coordination_hints: {}
+    signal_capabilities: []
+    parallelism_constraints: []
+    gate_preferences: {}
+  capabilities: []
+  role_type: coordinator
+  coordinator_policy: null
+- id: startup-studio:cto
+  name: CTO
+  responsibility: Technical architecture and engineering leadership
+  reports_to: startup-studio:ceo
+  icon: null
+  can_spawn:
+  - startup-studio:engineer
+  - startup-studio:designer
+  tools: []
+  preferred_external_agent: claude_code
+  prompt_refs:
+  - 'You are the CTO. Technical architecture and engineering leadership Coordinate
+    work with: Engineer, Designer, QA Engineer. Delegate tasks appropriately and aggregate
+    results.'
+  skill_refs: []
+  handoff_template_ref: null
+  memory_policy_ref: null
+  artifact_contract_ref: null
+  runtime_policy:
+    execution_strategy: native
+    allowed_downstream_roles:
+    - startup-studio:engineer
+    - startup-studio:designer
+    - startup-studio:qa
+    review_role: null
+    default_turn_type: work
+    shell_timeout_override: null
+    setup_env_type: null
+    coordination_hints: {}
+    signal_capabilities: []
+    parallelism_constraints: []
+    gate_preferences: {}
+  capabilities: []
+  role_type: coordinator
+  coordinator_policy: null
+- id: startup-studio:engineer
+  name: Engineer
+  responsibility: Full-stack development and implementation
+  reports_to: startup-studio:cto
+  icon: null
+  can_spawn: []
+  tools: []
+  preferred_external_agent: claude_code
+  prompt_refs:
+  - You are the Engineer. Full-stack development and implementation Focus on delivering
+    quality work within your area of expertise.
+  skill_refs: []
+  handoff_template_ref: null
+  memory_policy_ref: null
+  artifact_contract_ref: null
+  runtime_policy:
+    execution_strategy: auto
+    allowed_downstream_roles: []
+    review_role: null
+    default_turn_type: work
+    shell_timeout_override: null
+    setup_env_type: null
+    coordination_hints: {}
+    signal_capabilities: []
+    parallelism_constraints: []
+    gate_preferences: {}
+  capabilities: []
+  role_type: worker
+  coordinator_policy: null
+- id: startup-studio:designer
+  name: Designer
+  responsibility: UI/UX design, prototyping, and user research
+  reports_to: startup-studio:cto
+  icon: null
+  can_spawn: []
+  tools: []
+  preferred_external_agent: null
+  prompt_refs:
+  - You are the Designer. UI/UX design, prototyping, and user research Focus on delivering
+    quality work within your area of expertise.
+  skill_refs: []
+  handoff_template_ref: null
+  memory_policy_ref: null
+  artifact_contract_ref: null
+  runtime_policy:
+    execution_strategy: auto
+    allowed_downstream_roles: []
+    review_role: null
+    default_turn_type: work
+    shell_timeout_override: null
+    setup_env_type: null
+    coordination_hints: {}
+    signal_capabilities: []
+    parallelism_constraints: []
+    gate_preferences: {}
+  capabilities: []
+  role_type: worker
+  coordinator_policy: null
+- id: startup-studio:qa
+  name: QA Engineer
+  responsibility: Testing, quality assurance, and bug tracking
+  reports_to: startup-studio:cto
+  icon: null
+  can_spawn: []
+  tools: []
+  preferred_external_agent: claude_code
+  prompt_refs:
+  - You are the QA Engineer. Testing, quality assurance, and bug tracking Focus on
+    delivering quality work within your area of expertise.
+  skill_refs: []
+  handoff_template_ref: null
+  memory_policy_ref: null
+  artifact_contract_ref: null
+  runtime_policy:
+    execution_strategy: auto
+    allowed_downstream_roles: []
+    review_role: null
+    default_turn_type: work
+    shell_timeout_override: null
+    setup_env_type: null
+    coordination_hints: {}
+    signal_capabilities: []
+    parallelism_constraints: []
+    gate_preferences: {}
+  capabilities: []
+  role_type: worker
+  coordinator_policy: null
+employees: []
+escalation_rules: []
+runtime_policies:
+  custom:
+    communication:
+      default_mode: dm
+      blocking_default: true
+      meeting_required_for: []
+      allow_broadcast: true
+    memory:
+      include_role_memory: false
+      include_project_memory: false
+      include_decision_log: true
+      include_artifact_index: true
+      recent_history_lines: 12
+    handoff:
+      require_structured_handoff: true
+      require_ack: true
+      include_risks: true
+      include_open_questions: true
+    artifact:
+      enforce_contract: false
+      require_artifact_index: true
+      required_kinds: []
+    review:
+      enable_work_item_gates: false
+      strict_gate_inference: true
+      require_reviewer_role: true
+      allow_human_override: true
+    gate_harness:
+      enabled: true
+      decision_mode: agent_first
+      default_degrade_policy: allow
+      auto_infer_turn_kind: true
+      auto_infer_gate_profile: true
+      max_rework_rounds_per_issue: 2
+      stagnation_threshold: 2
+      allow_pass_with_constraints: true
+      enable_delivery_constraints_propagation: true
+      agent_model: ''
+      agent_confidence_threshold: 0.55
+      fallback_to_rules_on_parse_error: true
+      builtin_blocker_map:
+        workspace_mismatch: rework_same_work_item
+        missing_required_artifact: rework_same_work_item
+        verification_missing: rework_same_work_item
+        dependency_not_ready: rework_same_work_item
+        cross_work_item_conflict: replan
+        external_secret_missing: await_user_decision
+        permission_missing: escalate
+        environment_capability_gap: pass_with_constraints
+        quality_gap: rework_same_work_item
+        goal_env_mismatch: replan
+        unresolved_user_visible_risk: pass_with_constraints
+      turn_kind_overrides: {}
+      gate_profile_overrides: {}
+    parallel:
+      auto_dispatch: true
+      review_gate_enabled: true
+      max_workers: 10
+    coordination:
+      inference_mode: llm_primary
+      fallback_mode: conservative
+      strict_gate_turn_kinds:
+      - verify
+      - deliver
+      mixed_gate_turn_kinds:
+      - synthesize
+      - review
+      - integration
+      allow_manager_release_for_mixed_only: true
+      allow_custom_signals: true
+talent_templates: []
+teams: []
+team_runtime:
+  default_team_id: ''
+  shared_role_session_scope: team
+  allow_shared_role_sessions: true
+  seat_refresh_interval_seconds: 30
+  metadata: {}
+installed_packages:
+- package_id: startup-studio
+  name: Startup Studio
+  version: 1.0.0
+  installed_at: '2026-07-24T17:08:43.568644+00:00'
+  source_path: builtin
+  role_ids:
+  - startup-studio:ceo
+  - startup-studio:cto
+  - startup-studio:engineer
+  - startup-studio:designer
+  - startup-studio:qa
+  template_ids:
+  - startup-studio:planning
+  - startup-studio:architecture
+  - startup-studio:design
+  - startup-studio:development
+  - startup-studio:testing
+  - startup-studio:review
+  - startup-studio:deploy
+  work_item_template_ids:
+  - startup-studio:planning
+  - startup-studio:architecture
+  - startup-studio:design
+  - startup-studio:development
+  - startup-studio:testing
+  - startup-studio:review
+  - startup-studio:deploy
+role_serial_queue_enabled: true
+metadata:
+  source: org_mode
+  organization_config_file: company_orgs/org_startup-studio_config.yaml

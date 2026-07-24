@@ -489,9 +489,16 @@ class CompanyKanbanProjectionTests(unittest.IsolatedAsyncioTestCase):
 
                 self.assertEqual(len(boards), 2)
                 self.assertEqual({board["board_id"] for board in boards}, {"primary-a", "primary-b"})
+                # Leader intake cards are now surfaced on the board alongside
+                # their child execution cards.
                 self.assertEqual(
                     {(task["task_id"], task["board_id"]) for task in tasks},
-                    {("child-item", "primary-a"), ("child-item-2", "primary-b")},
+                    {
+                        ("root-item", "primary-a"),
+                        ("child-item", "primary-a"),
+                        ("root-item-2", "primary-b"),
+                        ("child-item-2", "primary-b"),
+                    },
                 )
                 self.assertEqual(
                     {column["board_id"] for column in columns if column["column_id"] == "todo"},
@@ -790,12 +797,14 @@ class CompanyKanbanProjectionTests(unittest.IsolatedAsyncioTestCase):
                 # Both sessions get a board
                 self.assertEqual(len(boards), 2)
                 self.assertEqual({b["board_id"] for b in boards}, {"task-a", "task-b"})
-                # Only session A (with run) has work-item tasks
-                self.assertEqual(len(tasks), 1)
-                self.assertEqual(tasks[0]["board_id"], "task-a")
-                self.assertEqual(tasks[0]["task_id"], "child-wi")
-                self.assertEqual(tasks[0]["work_item_projection_id"], "child-wi")
-                self.assertEqual(tasks[0]["work_item_turn_type"], "execute")
+                # Session A (with run) surfaces its leader intake + child card;
+                # session B (no run) contributes none.
+                self.assertEqual(len(tasks), 2)
+                self.assertEqual({t["board_id"] for t in tasks}, {"task-a"})
+                self.assertEqual({t["task_id"] for t in tasks}, {"root-wi", "child-wi"})
+                child = next(t for t in tasks if t["task_id"] == "child-wi")
+                self.assertEqual(child["work_item_projection_id"], "child-wi")
+                self.assertEqual(child["work_item_turn_type"], "execute")
                 # Both boards have company columns
                 self.assertEqual(
                     {c["board_id"] for c in columns if c["column_id"] == "todo"},

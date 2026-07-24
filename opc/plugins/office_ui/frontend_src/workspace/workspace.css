@@ -671,9 +671,9 @@
 }
 
 .ctx-work-item-progress {
-  flex: 0 0 84px;
-  height: 84px;
-  min-height: 84px;
+  flex: 0 0 96px;
+  height: 96px;
+  min-height: 96px;
   padding: 12px 12px 0;
   overflow: hidden;
   position: relative;
@@ -683,9 +683,9 @@
 
 .ctx-work-item-progress .wi-progress-card {
   box-sizing: border-box;
-  height: 72px;
+  height: 84px;
   padding: 10px 12px;
-  gap: 7px;
+  gap: 6px;
   overflow: hidden;
 }
 
@@ -693,7 +693,13 @@
   min-width: 0;
   flex-wrap: nowrap;
   overflow-x: auto;
+  /* Keep vertical overflow visible-in-practice: the hovered chip's focus
+     ring is a box-shadow that extends ~2px beyond the pill; the padding
+     below reserves that space so the ring renders as a full rounded
+     outline instead of clipped top/bottom brackets. Right padding ensures
+     the last chip has breathing room when scrolled fully right. */
   overflow-y: hidden;
+  padding: 4px 12px 4px 2px;
   scrollbar-width: none;
 }
 

@@ -425,6 +425,7 @@ export interface RoleWorkItemRow {
    *  work items, in which case the row is not yet click-through-able. */
   executionTurnId?: string
   /** Activity log already filtered by ``workItemProjectionId`` server-side. */
+  dependencies?: string[]
   progressLog: ProgressEntry[]
   /** Detailed runtime activity grouped by visible work item + hidden
    *  report/review helper work items that belong to this row. */

@@ -546,6 +546,9 @@ function mapBackendRoleWorkItemRow(raw: any): RoleWorkItemRow {
     createdAt: normalizeEpochMs(raw.created_at ?? raw.createdAt),
     updatedAt: normalizeEpochMs(raw.updated_at ?? raw.updatedAt),
     executionTurnId: raw.execution_turn_id ?? raw.executionTurnId ?? undefined,
+    dependencies: Array.isArray(raw.dependencies)
+      ? (raw.dependencies as unknown[]).map(d => String(d)).filter(Boolean)
+      : [],
     activitySections: rawActivitySections
       .filter((section): section is Record<string, unknown> => !!section && typeof section === 'object')
       .map(mapBackendRoleWorkItemActivitySection),

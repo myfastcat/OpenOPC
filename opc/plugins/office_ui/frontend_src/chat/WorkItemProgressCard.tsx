@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type {
   AgentAnimStatus,
@@ -43,6 +43,17 @@ interface WorkItemInfo {
   roleName?: string
   status: WorkItemStatus
   executionTurnId?: string
+  /** Work-item title (e.g. "…Intake" / "Deliver final result…"). Used only
+   *  for the chip tooltip so per-work-item chips of the same role stay
+   *  distinguishable while the visible label remains the role name. */
+  workItemTitle?: string
+  /** Stable work-item id — the node key for the dependency graph. */
+  workItemId?: string
+  /** Upstream work-item ids (only those resolving to a visible chip). */
+  dependencies?: string[]
+  /** Column index in the rank-grouped pipeline (intake leftmost, delivery
+   *  rightmost, middle items by dependency depth). */
+  rank?: number
 }
 
 interface RoleTurnInfo {
@@ -404,6 +415,111 @@ export function WorkItemProgressCard({
     return summaries
   }, [displayRoleWorkItems])
 
+  // Company-mode pipeline: one chip per DelegationWorkItem, ordered by the
+  // dependency chain (topological rank) instead of by timestamp. This splits
+  // a role that owns several work items into separate chips — notably the
+  // leader's ``intake`` (a dependency source) and ``delivery`` (the sink that
+  // depends on every executor), so the bar reads intake → executors →
+  // delivery. Chips keep the role name as their visible label (the work-item
+  // title lives in the tooltip) so single-work-item roles render unchanged.
+  const pipelineChips = useMemo<WorkItemInfo[]>(() => {
+    if (!displayRoleWorkItems) return []
+    interface ChipNode {
+      row: RoleWorkItemRow
+      roleName: string
+      roleId: string
+    }
+    const nodes: ChipNode[] = []
+    const byId = new Map<string, ChipNode>()
+    // The pipeline is a business-work-item bar: intake -> executors ->
+    // delivery. Internal turns (manager review, self-evolution, report)
+    // are audit artifacts, not pipeline stages. The executor rollup already
+    // drops them; when we fall back to the effective-owner rollup we must
+    // apply the same filter here, otherwise e.g. the manager's
+    // "Self-Evolution Review" surfaces as an extra same-role chip wedged
+    // beside delivery and reads as a merged/duplicate chip.
+    const PIPELINE_KINDS = new Set(['execute', 'intake', 'delivery'])
+    for (const summary of Object.values(displayRoleWorkItems)) {
+      if (!summary || !Array.isArray(summary.workItems) || summary.workItems.length === 0) continue
+      const roleName = summary.roleName || summary.roleId
+      for (const row of summary.workItems) {
+        if (!PIPELINE_KINDS.has(trimString(row.kind).toLowerCase())) continue
+        const node: ChipNode = { row, roleName, roleId: summary.roleId }
+        nodes.push(node)
+        if (row.workItemId) byId.set(row.workItemId, node)
+      }
+    }
+    if (nodes.length === 0) return []
+    // Longest-path rank over dependency edges present in this run. Edges to
+    // ids outside the visible set (hidden helper cards) are ignored; a cycle
+    // guard keeps a malformed graph from recursing forever.
+    const rankCache = new Map<string, number>()
+    const visiting = new Set<string>()
+    const rankOf = (id: string): number => {
+      const cached = rankCache.get(id)
+      if (cached !== undefined) return cached
+      if (visiting.has(id)) return 0
+      visiting.add(id)
+      const deps = (byId.get(id)?.row.dependencies ?? []).filter(d => d !== id && byId.has(d))
+      let rank = 0
+      for (const dep of deps) rank = Math.max(rank, rankOf(dep) + 1)
+      visiting.delete(id)
+      rankCache.set(id, rank)
+      return rank
+    }
+    // Column rank drives both left-to-right ordering and stage grouping.
+    // The entry point (``intake``) is pinned to the leading column and the
+    // final ``delivery`` to the trailing one; everything in between is laid
+    // out by dependency depth (longest-path rank) so parallel siblings share
+    // a column. This is robust against the leader's intake having no
+    // ``created_at`` (which defaults to "now" at the sync boundary).
+    const kindOf = (row: RoleWorkItemRow): string => trimString(row.kind).toLowerCase()
+    const topoRankOf = (row: RoleWorkItemRow): number =>
+      row.workItemId ? rankOf(row.workItemId) : 0
+    let maxMiddleRank = 0
+    for (const node of nodes) {
+      const k = kindOf(node.row)
+      if (k !== 'intake' && k !== 'delivery') {
+        maxMiddleRank = Math.max(maxMiddleRank, topoRankOf(node.row))
+      }
+    }
+    const columnRankOf = (row: RoleWorkItemRow): number => {
+      const k = kindOf(row)
+      if (k === 'intake') return -1
+      if (k === 'delivery') return maxMiddleRank + 1
+      return topoRankOf(row)
+    }
+    const ordered = [...nodes].sort((a, b) => {
+      const ca = columnRankOf(a.row)
+      const cb = columnRankOf(b.row)
+      if (ca !== cb) return ca - cb
+      if (a.row.createdAt !== b.row.createdAt) return a.row.createdAt - b.row.createdAt
+      return (a.row.workItemId ?? '').localeCompare(b.row.workItemId ?? '')
+    })
+    return ordered.map((node, idx) => ({
+      // ``projectionId`` is used only as the React list key, so make it
+      // unconditionally unique per position. Backend delivery rollups can
+      // reuse a work-item/projection id, which previously collided into a
+      // single key and dropped/merged the trailing chip.
+      projectionId: `${node.row.workItemId || node.row.workItemProjectionId || node.roleId}#${idx}`,
+      workItemId: node.row.workItemId || undefined,
+      // Only dependencies that resolve to a visible chip participate in the
+      // graph; hidden helper cards are dropped so columns/highlight stay sane.
+      dependencies: (node.row.dependencies ?? []).filter(
+        d => d !== node.row.workItemId && byId.has(d),
+      ),
+      rank: columnRankOf(node.row),
+      // Chip label is the work-item (task) name so same-role chips such as the
+      // leader's intake vs. delivery are distinguishable; the role name moves
+      // to the tooltip.
+      title: trimString(node.row.title) || node.roleName,
+      roleName: node.roleName,
+      workItemTitle: trimString(node.row.title) || undefined,
+      status: phaseAggregateForRow(node.row.phase),
+      executionTurnId: node.row.executionTurnId,
+    }))
+  }, [displayRoleWorkItems])
+
   const roleSummariesFromSessions = useMemo<RoleSummaryInfo[]>(() => {
     const sessions = [...(childSessions ?? [])]
     if (sessions.length === 0) return []
@@ -530,6 +646,10 @@ export function WorkItemProgressCard({
   // when available (kanban-push runs). Fall back to work-item-log work items
   // when child sessions haven't been serialized yet.
   const workItems = useMemo<WorkItemInfo[]>(() => {
+    // Company/org runs: one chip per work item, dependency-chain ordered.
+    if (isCompanyRuntime && pipelineChips.length > 0) {
+      return pipelineChips
+    }
     if (roleSummaries.length > 0) {
       return roleSummaries.map(role => ({
         projectionId: role.roleKey,
@@ -540,7 +660,43 @@ export function WorkItemProgressCard({
       }))
     }
     return isCompanyRuntime ? [] : workItemLogWorkItems
-  }, [isCompanyRuntime, roleSummaries, workItemLogWorkItems])
+  }, [isCompanyRuntime, pipelineChips, roleSummaries, workItemLogWorkItems])
+
+  // Company/org pipeline: one chip per work item in a single topological row
+  // (intake → executors → delivery). We keep only the dependency adjacency
+  // (upstream from each chip's deps, downstream by inverting them) so hovering
+  // a chip can highlight its *direct* prerequisites and dependents.
+  const companyPipeline = useMemo(() => {
+    if (!(isCompanyRuntime && pipelineChips.length > 0)) return null
+    const upstream = new Map<string, string[]>()
+    const downstream = new Map<string, string[]>()
+    for (const chip of pipelineChips) {
+      const id = chip.workItemId
+      if (!id) continue
+      const deps = chip.dependencies ?? []
+      upstream.set(id, deps)
+      for (const dep of deps) {
+        const arr = downstream.get(dep)
+        if (arr) arr.push(id)
+        else downstream.set(dep, [id])
+      }
+    }
+    return { upstream, downstream }
+  }, [isCompanyRuntime, pipelineChips])
+
+  const [hoveredWorkItemId, setHoveredWorkItemId] = useState<string | null>(null)
+
+  // Direct prerequisites + dependents of the hovered chip (immediate
+  // neighbours only, so a near-linear pipeline doesn't light up end to end).
+  // ``null`` when nothing is hovered → no dimming.
+  const relatedWorkItemIds = useMemo<Set<string> | null>(() => {
+    if (!companyPipeline || !hoveredWorkItemId) return null
+    const { upstream, downstream } = companyPipeline
+    const related = new Set<string>([hoveredWorkItemId])
+    for (const up of upstream.get(hoveredWorkItemId) ?? []) related.add(up)
+    for (const down of downstream.get(hoveredWorkItemId) ?? []) related.add(down)
+    return related
+  }, [companyPipeline, hoveredWorkItemId])
 
   const isPreparingCompanyRuntime = isCompanyRuntime && roleSummaries.length === 0
   if (!isCompanyRuntime && workItemLog.length === 0 && workItems.length === 0 && roleSummaries.length === 0) return null
@@ -552,7 +708,65 @@ export function WorkItemProgressCard({
         <span>Execution Progress</span>
       </div>
 
-      {workItems.length > 0 && (
+      {companyPipeline ? (
+        <div className="wi-progress-pipeline wi-progress-pipeline-dag">
+          {pipelineChips.map((chip, i) => {
+            const id = chip.workItemId
+            const focused = id != null && hoveredWorkItemId === id
+            const inRelated = relatedWorkItemIds != null && id != null && relatedWorkItemIds.has(id)
+            const dimmed = relatedWorkItemIds != null && !inRelated
+            const className = [
+              'wi-projection-chip',
+              `wi-projection-${chip.status}`,
+              focused ? 'wi-projection-focus' : '',
+              dimmed ? 'wi-projection-dimmed' : '',
+            ].filter(Boolean).join(' ')
+            return (
+              <div key={chip.projectionId} className="wi-projection-group">
+                <button
+                  type="button"
+                  className={className}
+                  onClick={() => {
+                    setHoveredWorkItemId(null)
+                    onWorkItemClick?.(chip.executionTurnId || '')
+                  }}
+                  onMouseEnter={() => id && setHoveredWorkItemId(id)}
+                  onMouseLeave={() => setHoveredWorkItemId(null)}
+                  onFocus={() => id && setHoveredWorkItemId(id)}
+                  onBlur={() => setHoveredWorkItemId(null)}
+                  title={`Open Runtime Session: ${chip.workItemTitle ?? chip.title}${chip.roleName ? ` (${chip.roleName})` : ''}`}
+                >
+                  <span className="wi-projection-text">
+                    {chip.roleName && <span className="wi-projection-role">{chip.roleName}</span>}
+                    <span className="wi-projection-label">{chip.title}</span>
+                  </span>
+                  {renderProjectionIcon(chip.status)}
+                </button>
+                {i < pipelineChips.length - 1 && (() => {
+                  const nextChip = pipelineChips[i + 1]
+                  const nextId = nextChip?.workItemId
+                  const bothRelated =
+                    relatedWorkItemIds != null &&
+                    id != null &&
+                    nextId != null &&
+                    relatedWorkItemIds.has(id) &&
+                    relatedWorkItemIds.has(nextId)
+                  const connectorDimmed =
+                    relatedWorkItemIds != null && !bothRelated
+                  const connectorClass = [
+                    'wi-projection-connector',
+                    bothRelated ? 'wi-projection-connector-highlight' : '',
+                    connectorDimmed ? 'wi-projection-connector-dimmed' : '',
+                  ].filter(Boolean).join(' ')
+                  return (
+                    <span className={connectorClass} aria-hidden="true">&rarr;</span>
+                  )
+                })()}
+              </div>
+            )
+          })}
+        </div>
+      ) : workItems.length > 0 ? (
         <div className="wi-progress-pipeline">
           {workItems.map((workItem, i) => (
             <div key={workItem.projectionId} className="wi-projection-group">
@@ -560,7 +774,7 @@ export function WorkItemProgressCard({
                 type="button"
                 className={`wi-projection-chip wi-projection-${workItem.status}`}
                 onClick={() => onWorkItemClick?.(workItem.executionTurnId || '')}
-                title={`Open Runtime Session${workItem.roleName ? `: ${workItem.title} (${workItem.roleName})` : `: ${workItem.title}`}`}
+                title={`Open Runtime Session: ${workItem.workItemTitle ?? workItem.title}${workItem.roleName ? ` (${workItem.roleName})` : ''}`}
               >
                 <span className="wi-projection-label">{workItem.title}</span>
                 {renderProjectionIcon(workItem.status)}
@@ -569,7 +783,7 @@ export function WorkItemProgressCard({
             </div>
           ))}
         </div>
-      )}
+      ) : null}
 
       {isPreparingCompanyRuntime && (
         <div className="wi-progress-pipeline wi-progress-pipeline-empty" role="status">

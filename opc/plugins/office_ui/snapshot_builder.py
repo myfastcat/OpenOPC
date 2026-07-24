@@ -916,6 +916,11 @@ def _build_role_work_items_for_session(
             "created_at": _coerce_event_timestamp(getattr(item, "created_at", None)),
             "updated_at": _coerce_event_timestamp(getattr(item, "updated_at", None)),
             "execution_turn_id": execution_turn_id or None,
+            "dependencies": [
+                str(dep).strip()
+                for dep in list(meta.get("dependency_work_item_ids", []) or [])
+                if str(dep).strip()
+            ],
             "progress_log": progress_log,
             "activity_sections": [
                 _public_activity_section(section)
@@ -1738,13 +1743,23 @@ async def build_company_kanban_projection(
                 employee = org_engine.get_employee(employee_id)
                 employee_name_by_id[employee_id] = str(getattr(employee, "name", "") or employee_id).strip()
 
-        visible_work_items = [
-            item
-            for item in work_items
-            if str(getattr(item, "parent_work_item_id", "") or "").strip()
-            and not bool(dict(getattr(item, "metadata", {}) or {}).get("attention_work_item", False))
-            and not should_hide_work_item_from_company_kanban(dict(getattr(item, "metadata", {}) or {}))
-        ]
+        def _kanban_visible(item: Any) -> bool:
+            meta = dict(getattr(item, "metadata", {}) or {})
+            if bool(meta.get("attention_work_item", False)):
+                return False
+            if should_hide_work_item_from_company_kanban(meta):
+                return False
+            # Child cards always show. Top-level (parentless) cards are
+            # orchestration scaffolding and normally hidden — except the
+            # leader's own ``intake`` (the first work item of the run) and the
+            # final user-facing delivery rollup, which mirror the Execution
+            # Progress panel's exception so the board and the chain agree.
+            if str(getattr(item, "parent_work_item_id", "") or "").strip():
+                return True
+            kind = str(getattr(item, "kind", "") or "").strip().lower()
+            return kind == "intake" or _is_final_delivery_rollup_item(item, meta, kind)
+
+        visible_work_items = [item for item in work_items if _kanban_visible(item)]
         formatted_tasks.extend(
             work_item_to_kanban(
                 item,

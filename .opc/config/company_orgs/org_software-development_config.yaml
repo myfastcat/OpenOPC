@@ -24,7 +24,7 @@ roles:
   - qa_engineer
   - security_reviewer
   tools: []
-  preferred_external_agent: codex
+  preferred_external_agent: opencode
   prompt_refs:
   - Clarify the user goal, repository boundaries, constraints, acceptance criteria,
     and delivery order before delegating.
@@ -63,7 +63,7 @@ roles:
   icon: clipboard
   can_spawn: []
   tools: []
-  preferred_external_agent: codex
+  preferred_external_agent: opencode
   prompt_refs:
   - Produce testable requirements and identify assumptions, exclusions, dependencies,
     and user-visible behavior.
@@ -97,7 +97,7 @@ roles:
   - backend_engineer
   - devops_engineer
   tools: []
-  preferred_external_agent: codex
+  preferred_external_agent: opencode
   prompt_refs:
   - Inspect the existing repository before proposing architecture. Prefer existing
     patterns and define contracts between work items.
@@ -136,7 +136,7 @@ roles:
   icon: design
   can_spawn: []
   tools: []
-  preferred_external_agent: codex
+  preferred_external_agent: opencode
   prompt_refs:
   - Implement complete UI states and verify desktop and mobile behavior with focused
     tests or browser evidence.
@@ -168,7 +168,7 @@ roles:
   icon: terminal
   can_spawn: []
   tools: []
-  preferred_external_agent: codex
+  preferred_external_agent: opencode
   prompt_refs:
   - Preserve data and API compatibility, validate inputs, handle failure paths, and
     add focused tests for changed behavior.
@@ -200,7 +200,7 @@ roles:
   icon: bug
   can_spawn: []
   tools: []
-  preferred_external_agent: codex
+  preferred_external_agent: opencode
   prompt_refs:
   - Build a risk-based test matrix, run focused and integration checks, and report
     reproducible defects with evidence.
@@ -234,7 +234,7 @@ roles:
   icon: settings
   can_spawn: []
   tools: []
-  preferred_external_agent: codex
+  preferred_external_agent: opencode
   prompt_refs:
   - Probe the environment first, keep changes reversible, document commands, and include
     health checks and rollback steps.
@@ -266,7 +266,7 @@ roles:
   icon: shield
   can_spawn: []
   tools: []
-  preferred_external_agent: codex
+  preferred_external_agent: opencode
   prompt_refs:
   - Review only the relevant attack surface, rank findings by severity, and distinguish
     blockers from hardening opportunities.
